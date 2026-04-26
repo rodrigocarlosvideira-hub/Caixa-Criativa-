@@ -123,6 +123,10 @@
   .chart-wrap-sm { position: relative; width: 100%; height: 200px; }
 
   footer { text-align: center; padding: 2rem; font-size: 12px; color: var(--muted); }
+  .cat-tag { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 500; }
+  .cat-tag .del-cat { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 13px; line-height: 1; padding: 0; transition: color .15s; }
+  .cat-tag .del-cat:hover { color: var(--red); }
+  .cat-tag.default-cat .del-cat { display: none; }
 </style>
 </head>
 <body>
@@ -156,11 +160,7 @@
       <div class="form-grid">
         <div class="field"><label>Descrição</label><input type="text" id="desc" placeholder="Ex: Venda produto A..."/></div>
         <div class="field"><label>Categoria</label>
-          <select id="cat">
-            <option>Vendas</option><option>Serviços</option><option>Fornecedores</option>
-            <option>Salários</option><option>Aluguel</option><option>Impostos</option>
-            <option>Marketing</option><option>Outros</option>
-          </select>
+          <select id="cat"></select>
         </div>
         <div class="field"><label>Valor (R$)</label><input type="number" id="valor" placeholder="0,00" min="0" step="0.01"/></div>
         <div class="field"><label>Data</label><input type="date" id="data"/></div>
@@ -220,6 +220,17 @@
   <!-- CATEGORIAS -->
   <div id="tab-categorias" class="section">
     <div class="panel">
+      <div class="panel-title">Gerenciar categorias</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem">
+        <div class="field" style="flex:1;min-width:180px">
+          <label>Nova categoria</label>
+          <input type="text" id="nova-cat" placeholder="Ex: Combustível, Delivery..."/>
+        </div>
+        <button class="btn-e" onclick="adicionarCategoria()" style="margin-bottom:0">+ Adicionar</button>
+      </div>
+      <div id="lista-cats" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+    </div>
+    <div class="panel">
       <div class="panel-title">Entradas por categoria</div>
       <div class="cat-grid" id="cat-e-grid"></div>
       <div class="chart-wrap-sm"><canvas id="chartCatE" role="img" aria-label="Entradas por categoria">Distribuição de entradas.</canvas></div>
@@ -237,8 +248,10 @@
 <script>
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const COLORS = ['#185FA5','#0F6E56','#854F0B','#A32D2D','#534AB7','#993C1D','#3B6D11','#5F5E5A'];
+const CATS_DEFAULT = ['Vendas','Serviços','Fornecedores','Salários','Aluguel','Impostos','Marketing','Outros'];
 
 let lancamentos = JSON.parse(localStorage.getItem('caixa_v2') || '[]');
+let categorias = JSON.parse(localStorage.getItem('caixa_cats') || 'null') || [...CATS_DEFAULT];
 let filtro = 'todos';
 let chartMes, chartHist, chartCatE, chartCatS;
 
@@ -260,7 +273,51 @@ for (let y = today.getFullYear(); y >= today.getFullYear() - 5; y--) {
   selAno.appendChild(o);
 }
 
-function save() { try { localStorage.setItem('caixa_v2', JSON.stringify(lancamentos)); } catch(e) {} }
+function save() {
+  try {
+    localStorage.setItem('caixa_v2', JSON.stringify(lancamentos));
+    localStorage.setItem('caixa_cats', JSON.stringify(categorias));
+  } catch(e) {}
+}
+
+function renderSelectCats() {
+  const sel = document.getElementById('cat');
+  const current = sel.value;
+  sel.innerHTML = categorias.map(c => `<option value="${c}"${c===current?' selected':''}>${c}</option>`).join('');
+}
+
+function renderListaCats() {
+  const lista = document.getElementById('lista-cats');
+  lista.innerHTML = categorias.map(c => {
+    const isDefault = CATS_DEFAULT.includes(c);
+    return `<span class="cat-tag${isDefault?' default-cat':''}">
+      ${c}
+      <button class="del-cat" onclick="removerCategoria('${c}')" title="Remover">✕</button>
+    </span>`;
+  }).join('');
+}
+
+function adicionarCategoria() {
+  const input = document.getElementById('nova-cat');
+  const nome = input.value.trim();
+  if (!nome) { alert('Digite o nome da categoria.'); return; }
+  if (categorias.map(c=>c.toLowerCase()).includes(nome.toLowerCase())) { alert('Categoria já existe.'); return; }
+  categorias.push(nome);
+  save();
+  input.value = '';
+  renderSelectCats();
+  renderListaCats();
+}
+
+function removerCategoria(nome) {
+  if (CATS_DEFAULT.includes(nome)) { alert('Categorias padrão não podem ser removidas.'); return; }
+  const emUso = lancamentos.some(l => l.cat === nome);
+  if (emUso && !confirm(`A categoria "${nome}" está em uso em alguns lançamentos. Remover mesmo assim?`)) return;
+  categorias = categorias.filter(c => c !== nome);
+  save();
+  renderSelectCats();
+  renderListaCats();
+}
 
 function fmt(v) {
   return 'R$ ' + Math.abs(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -299,7 +356,7 @@ function showTab(id, btn) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + id).classList.add('active');
   btn.classList.add('active');
-  setTimeout(() => { renderRelatorio(); renderCategorias(); }, 50);
+  setTimeout(() => { renderRelatorio(); renderCategorias(); renderListaCats(); }, 50);
 }
 
 function renderTabela() {
@@ -475,6 +532,7 @@ function exportPDF() {
 }
 
 function renderAll() { renderCards(); renderTabela(); }
+renderSelectCats();
 renderAll();
 </script>
 </body>
